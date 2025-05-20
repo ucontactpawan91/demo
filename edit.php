@@ -3,19 +3,30 @@ include 'db.php';
 
 if (isset($_GET['id'])) {
     $id = $_GET['id'];
-    $sql = "SELECT users.*, countries.name AS country_name, countries.id AS country_id, 
-                   state.name AS state_name, city.name AS city_name 
-            FROM users 
-            LEFT JOIN countries ON users.country_id = countries.id 
-            LEFT JOIN state ON users.state_id = state.id 
-            LEFT JOIN city ON users.city_id = city.id 
-            WHERE users.id = ?";
-    $stmt = $conn->prepare($sql);
-    if (!$stmt) {
-        die("SQL error: " . $conn->error);
+    
+    // First get the user details with joins
+    $sql = "SELECT u.*, 
+                   c.name AS country_name, 
+                   s.name AS state_name,
+                   ct.name AS city_name,
+                   c.id AS country_id,
+                   s.id AS state_id,
+                   ct.id AS city_id
+            FROM users u 
+            LEFT JOIN countries c ON u.country_id = c.id 
+            LEFT JOIN state s ON u.state_id = s.id 
+            LEFT JOIN city ct ON u.city_id = ct.id 
+            WHERE u.id = ?";
+            
+    if (!($stmt = $conn->prepare($sql))) {
+        die("Prepare failed: " . $conn->error);
     }
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
+    if (!$stmt->bind_param("i", $id)) {
+        die("Binding parameters failed: " . $stmt->error);
+    }
+    if (!$stmt->execute()) {
+        die("Execute failed: " . $stmt->error);
+    }
     $result = $stmt->get_result();
     $user = $result->fetch_assoc();
 
@@ -29,6 +40,22 @@ if (isset($_GET['id'])) {
     exit;
 }
 
+// Get user's hobbies
+$userHobbies = [];
+if (!empty($user['hobbies'])) {
+    $userHobbies = explode(',', $user['hobbies']);
+}
+
+// Get all hobbies
+$sql = "SELECT id, name FROM hobbies";
+$result = $conn->query($sql);
+$hobbies = [];
+if ($result) {
+    while ($row = $result->fetch_assoc()) {
+        $hobbies[] = $row;
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id = $_GET['id'];
     $username = $_POST['username'];
@@ -39,6 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $country_id = $_POST['country'];
     $state_id = $_POST['state'];
     $city_id = $_POST['city'];
+    $hobby_ids = isset($_POST['hobbies']) ? $_POST['hobbies'] : [];
 
     $sql = "UPDATE users SET username = ?, email = ?, address = ?, contact = ?, gender = ?, country_id = ?, state_id = ?, city_id = ? WHERE id = ?";
     $stmt = $conn->prepare($sql);
@@ -48,6 +76,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt->bind_param("sssssiiii", $username, $email, $address, $contact, $gender, $country_id, $state_id, $city_id, $id);
 
     if ($stmt->execute()) {
+        // Update the hobbies in users table
+        $hobbies_string = !empty($_POST['hobbies']) ? implode(',', $_POST['hobbies']) : '';
+        $sql = "UPDATE users SET hobbies = ? WHERE id = ?";
+        if ($hobby_stmt = $conn->prepare($sql)) {
+            $hobby_stmt->bind_param("si", $hobbies_string, $id);
+            if (!$hobby_stmt->execute()) {
+                echo "Error updating hobbies: " . $hobby_stmt->error;
+            }
+            $hobby_stmt->close();
+        } else {
+            echo "Error preparing hobby update: " . $conn->error;
+        }
+
         header("Location: index.php?success=User updated successfully");
         exit;
     } else {
@@ -100,6 +141,22 @@ if (!empty($user['state_id'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Edit User</title>
     <link rel="stylesheet" href="css/bootstrap.min.css">
+    <style>
+        .hobbies-group {
+            border: 1px solid #ced4da;
+            border-radius: 0.25rem;
+            padding: 15px;
+            margin-top: 5px;
+        }
+
+        .hobbies-group.is-invalid {
+            border-color: #dc3545;
+        }
+
+        .form-check {
+            margin-bottom: 8px;
+        }
+    </style>
 </head>
 <body>
     <div class="container mt-5">
@@ -167,6 +224,24 @@ if (!empty($user['state_id'])) {
                     </select>
                 </div>
             </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Choose your hobbies:</label>
+                    <div class="hobbies-group">
+                        <?php foreach ($hobbies as $hobby): ?>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="hobbies[]"
+                                    id="hobby<?= $hobby['id'] ?>" value="<?= $hobby['id'] ?>"
+                                    <?= in_array($hobby['id'], $userHobbies) ? 'checked' : '' ?>>
+                                <label class="form-check-label" for="hobby<?= $hobby['id'] ?>">
+                                    <?= htmlspecialchars($hobby['name']) ?>
+                                </label>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <div class="invalid-feedback hobbies-error"></div>
+                </div>
+            </div>
             <button type="submit" class="btn btn-primary">Update</button>
         </form>
         <div class="mt-4">
@@ -223,6 +298,33 @@ if (!empty($user['state_id'])) {
         function changeCity() {
             populateCities();
         }
+
+        function validateHobbies() {
+            const checkedHobbies = $("input[name='hobbies[]']:checked").length;
+            if (checkedHobbies === 0) {
+                $('.hobbies-error').text('Please choose at least one hobby');
+                $('.hobbies-group').addClass('is-invalid');
+                return false;
+            }
+            $('.hobbies-error').text('');
+            $('.hobbies-group').removeClass('is-invalid');
+            return true;
+        }
+
+        $(document).ready(function() {
+            // Add validation for hobbies
+            $("input[name='hobbies[]']").change(function() {
+                validateHobbies();
+            });
+
+            // Add hobbies validation to form submission
+            $('form').on('submit', function(e) {
+                let isValid = true;
+                if (!validateHobbies()) isValid = false;
+
+                return isValid;
+            });
+        });
     </script>
 </body>
 </html>

@@ -10,7 +10,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['signup'])) {
     $name = $_POST['name'];
     $password = $_POST['password'];
     $confirmPassword = $_POST['confirm_password'];
-    $address = "Default Address"; // Add default values for missing fields
+    $address = "Default Address"; 
     $contact = "0000000000";
     $gender = "Not Specified";
     $state_id = 1;
@@ -18,7 +18,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['signup'])) {
     $country_id = 1;
     $created_at = date('Y-m-d H:i:s');
 
-    // Validate inputs
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $errors['email'] = 'Invalid email format';
     }
@@ -32,7 +31,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['signup'])) {
         $errors['confirm_password'] = 'Passwords do not match';
     }
 
-    // Check if email already exists
     $stmt = $conn->prepare("SELECT * FROM users WHERE email = ?");
     if (!$stmt) {
         die("Database error (SELECT): " . $conn->error);
@@ -61,7 +59,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['signup'])) {
         die("Database error (EXECUTE): " . $stmt->error);
     }
 
-    // Redirect to login page after successful registration
     $_SESSION['success'] = 'Registration successful. Please log in.';
     header('Location: login.php');
     exit();

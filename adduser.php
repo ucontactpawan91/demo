@@ -113,24 +113,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } else {
 
-        $sql = "INSERT INTO users (username, email, password, address, contact, gender, country_id, state_id, city_id) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        $sql = "INSERT INTO users (username, email, password, address, contact, gender, country_id, state_id, city_id, hobbies) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("ssssssiii", $username, $email, $password, $address, $contact, $gender, $country_id, $state_id, $city_id);
-
-        if ($stmt->execute()) {
-            $user_id = $stmt->insert_id;
-
-            // Save hobbies
-            if (!empty($_POST['hobbies'])) {
-                $hobby_stmt = $conn->prepare("INSERT INTO user_hobbies (user_id, hobby_id) VALUES (?, ?)");
-                foreach ($_POST['hobbies'] as $hobby_id) {
-                    $hobby_stmt->bind_param("ii", $user_id, $hobby_id);
-                    $hobby_stmt->execute();
-                }
-                $hobby_stmt->close();
-            }
-
+        //hobbies in comma separated array 
+        $hobbies_string = !empty($_POST['hobbies']) ? implode(',', $_POST['hobbies']) : '';
+        $stmt->bind_param("ssssssiiis", $username, $email, $password, $address, $contact, $gender, $country_id, $state_id, $city_id, $hobbies_string);
+        if ($stmt->execute()) { 
             header("Location: index.php?success=User created successfully");
             exit;
         } else {
@@ -172,7 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <div class="container mt-5">
         <h1 class="text-left">Add Users</h1>
-        <form id="addUserForm" action="create.php" method="POST" novalidate>
+        <form id="addUserForm" action="adduser.php" method="POST" novalidate>
             <div class="row">
                 <div class="col-md-6">
                     <label for="name" class="form-label">Name</label>
@@ -480,7 +469,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const errorDiv = $('.' + id + "-error");
             if (!gender.val()) {
                 errorDiv.text('Select a gender');
-                // Add red border to both radio buttons
                 $("input[name='" + id + "']").addClass('is-invalid');
                 errorDiv.show();
                 return false;

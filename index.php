@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     <div class="container mt-5">
         <h1 class="text-center"><b>User Dashboard</b></h1>
         <div class="d-flex justify-content-between mt-4">
-            <a href="create.php" class="btn btn-primary mx-2">Create new user</a>
+            <a href="adduser.php" class="btn btn-primary mx-2">Add New User</a>
             <a href="logout.php" class="btn btn-danger mx-2">Logout</a>
         </div>
         <div class="mt-4">
@@ -69,7 +69,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
             }
             ?>
 
-            <?php
+            <?php            // Get all hobbies to create a lookup map
+            $hobbiesMap = [];
+            $hobbiesResult = $conn->query("SELECT id, name FROM hobbies");
+            if ($hobbiesResult->num_rows > 0) {
+                while ($hobby = $hobbiesResult->fetch_assoc()) {
+                    $hobbiesMap[$hobby['id']] = $hobby['name'];
+                }
+            }
+
             $sql = "SELECT users.*, countries.name as country_name, state.name as state_name, city.name as city_name 
                     FROM users 
                     LEFT JOIN countries ON users.country_id = countries.id 
@@ -79,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
 
             if ($result->num_rows > 0) {
                 echo '<table class="table table-bordered mt-4">';
-                echo '<thead><tr><th>ID</th><th>User Name</th><th>Email</th><th>Address</th><th>Contact</th><th>Gender</th><th>Country</th><th>State</th><th>City</th><th>Actions</th></tr></thead>';
+                echo '<thead><tr><th>ID</th><th>User Name</th><th>Email</th><th>Address</th><th>Contact</th><th>Gender</th><th>Country</th><th>State</th><th>City</th><th>Hobbies</th><th>Actions</th></tr></thead>';
                 echo '<tbody>';
                 while ($row = $result->fetch_assoc()) {
                     echo '<tr>';
@@ -92,6 +100,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
                     echo '<td>' . $row["country_name"] . '</td>';
                     echo '<td>' . $row["state_name"] . '</td>';
                     echo '<td>' . $row["city_name"] . '</td>';
+                    // Convert hobby IDs to names
+                    $hobbyNames = [];
+                    if (!empty($row["hobbies"])) {
+                        $hobbyIds = explode(',', $row["hobbies"]);
+                        foreach ($hobbyIds as $id) {
+                            if (isset($hobbiesMap[$id])) {
+                                $hobbyNames[] = $hobbiesMap[$id];
+                            }
+                        }
+                    }
+                    echo '<td>' . implode(', ', $hobbyNames) . '</td>';
                     echo '<td><a href="edit.php?id=' . $row['id'] . '" class="btn btn-warning btn-sm">Edit</a> ';
                     echo '<a href="delete.php?id=' . $row['id'] . '" class="btn btn-danger btn-sm" onclick="return confirm(\'Are you sure you want to delete this user? \')">Delete</a></td>';
                     echo '</tr>';
