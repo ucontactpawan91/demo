@@ -123,6 +123,19 @@ unset($_SESSION['errors']);
         </div>
     </div>
     <script src="script.js"></script>
+    <script>
+    document.getElementById("eye").addEventListener("click", function () {
+    const pwd = document.getElementById("password");
+    if (pwd.type === "password") {
+        pwd.type = "text";
+    } else {
+        pwd.type = "password";
+        
+    }
+    
+});
+
+</script>
 </body>
 
 </html>

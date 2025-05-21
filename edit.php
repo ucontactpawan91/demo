@@ -1,4 +1,13 @@
 <?php
+session_start();
+require_once('includes/access_control.php');
+
+// Check if user is logged in and has update permission
+if (!isset($_SESSION['user_id']) || !hasPermission($_SESSION['user_id'], 'update')) {
+    header('Location: index.php');
+    exit();
+}
+
 include 'db.php';
 
 if (isset($_GET['id'])) {

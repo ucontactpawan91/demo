@@ -1,5 +1,13 @@
 <?php
+session_start();
 include 'db.php';
+require_once('includes/access_control.php');
+
+// Check if user is logged in and has delete permission
+if (!isset($_SESSION['user_id']) || !hasPermission($_SESSION['user_id'], 'delete')) {
+    header('Location: index.php');
+    exit();
+}
 
 if(isset($_GET['id'])){
     $id = $_GET['id'];

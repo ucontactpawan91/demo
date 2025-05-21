@@ -1,45 +1,53 @@
 <?php
 session_start();
-include 'db.php'; // Ensure this file connects to your database
+include 'db.php';
+include __DIR__ . '/includes/access_control.php';
 
-// Check if the user is logged in
 if (!isset($_SESSION['user_id'])) {
-    // Redirect to login page if not logged in
     header("Location: login.php");
     exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
-    $email = trim($_POST['email']);
-    $password = trim($_POST['password']);
+$user_role = getUserRole($_SESSION['user_id']);
 
-    // Validate input
-    if (empty($email) || empty($password)) {
-        $_SESSION['errors']['login'] = "Email and password are required.";
-        header("Location: login.php");
-        exit;
+// Get all hobbies to create a lookup map
+$hobbiesMap = [];
+$hobbiesResult = $conn->query("SELECT id, name FROM hobbies");
+if ($hobbiesResult && $hobbiesResult->num_rows > 0) {
+    while ($hobby = $hobbiesResult->fetch_assoc()) {
+        $hobbiesMap[$hobby['id']] = $hobby['name'];
     }
+}
 
-    // Check credentials in the database
-    $sql = "SELECT * FROM users WHERE email = ?";
+// Fetch users based on role with all necessary joins
+$sql = "SELECT u.*, c.name as country_name, s.name as state_name, ci.name as city_name 
+        FROM users u 
+        LEFT JOIN countries c ON u.country_id = c.id 
+        LEFT JOIN state s ON u.state_id = s.id 
+        LEFT JOIN city ci ON u.city_id = ci.id";
+
+// Add role-based conditions
+if ($user_role === 'USER') {
+    $sql .= " WHERE u.id = ?";
     $stmt = $conn->prepare($sql);
-    $stmt->bind_param("s", $email);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $user = $result->fetch_assoc();
-
-    if ($user && password_verify($password, $user['password'])) {
-        // Login successful
-        $_SESSION['user_id'] = $user['id'];
-        $_SESSION['username'] = $user['username'];
-        header("Location: dashboard.php"); // Redirect to a dashboard or home page
-        exit;
-    } else {
-        // Invalid credentials
-        $_SESSION['errors']['login'] = "Invalid email or password.";
-        header("Location: login.php");
-        exit;
+    if ($stmt) {
+        $stmt->bind_param("i", $_SESSION['user_id']);
     }
+} elseif ($user_role === 'TEAM_LEADER') {
+    $sql .= " LEFT JOIN team_members tm ON u.id = tm.user_id 
+              LEFT JOIN teams t ON tm.team_id = t.id 
+              WHERE t.team_leader_id = ? OR u.id = ?";
+    $stmt = $conn->prepare($sql);
+    if ($stmt) {
+        $stmt->bind_param("ii", $_SESSION['user_id'], $_SESSION['user_id']);
+    }
+} else {
+    // For ADMIN and HR roles - show all users
+    $stmt = $conn->prepare($sql);
+}
+
+if (!$stmt) {
+    die("Error preparing statement: " . $conn->error);
 }
 ?>
 
@@ -55,7 +63,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     <div class="container mt-5">
         <h1 class="text-center"><b>User Dashboard</b></h1>
         <div class="d-flex justify-content-between mt-4">
-            <a href="adduser.php" class="btn btn-primary mx-2">Add New User</a>
+            <?php if (getUserRole($_SESSION['user_id']) === 'ADMIN'): ?>
+                <div>
+                    <a href="adduser.php" class="btn btn-primary mx-2">Add New User</a>
+                    <a href="manage_access.php" class="btn btn-info mx-2">Manage User Access</a>
+                </div>
+            <?php else: ?>
+                <a href="adduser.php" class="btn btn-primary mx-2">Add New User</a>
+            <?php endif; ?>
             <a href="logout.php" class="btn btn-danger mx-2">Logout</a>
         </div>
         <div class="mt-4">
@@ -69,21 +84,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
             }
             ?>
 
-            <?php            // Get all hobbies to create a lookup map
-            $hobbiesMap = [];
-            $hobbiesResult = $conn->query("SELECT id, name FROM hobbies");
-            if ($hobbiesResult->num_rows > 0) {
-                while ($hobby = $hobbiesResult->fetch_assoc()) {
-                    $hobbiesMap[$hobby['id']] = $hobby['name'];
-                }
-            }
-
-            $sql = "SELECT users.*, countries.name as country_name, state.name as state_name, city.name as city_name 
-                    FROM users 
-                    LEFT JOIN countries ON users.country_id = countries.id 
-                    LEFT JOIN state ON users.state_id = state.id 
-                    LEFT JOIN city ON users.city_id = city.id";
-            $result = $conn->query($sql);
+            <?php            
+                $stmt->execute();
+                $result = $stmt->get_result();
 
             if ($result->num_rows > 0) {
                 echo '<table class="table table-bordered mt-4">';
@@ -126,4 +129,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
-</html>
+</html> 
