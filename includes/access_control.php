@@ -66,36 +66,6 @@ function isTeamMember($user_id, $team_leader_id) {
     return $stmt->get_result()->num_rows > 0;
 }
 
-function softDeleteUser($user_id, $deleted_by) {
-    global $conn;
-    
-    // Start transaction
-    $conn->begin_transaction();
-    
-    try {
-        // Insert into deleted_records
-        $stmt = $conn->prepare("
-            INSERT INTO deleted_records (table_name, record_id, deleted_by) 
-            VALUES ('users', ?, ?)
-        ");
-        $stmt->bind_param("ii", $user_id, $deleted_by);
-        $stmt->execute();
-        
-        // Update user status
-        $stmt = $conn->prepare("
-            UPDATE users SET is_deleted = 1 
-            WHERE id = ?
-        ");
-        $stmt->bind_param("i", $user_id);
-        $stmt->execute();
-        
-        $conn->commit();
-        return true;
-    } catch (Exception $e) {
-        $conn->rollback();
-        return false;    }
-}
-
 function getUserPermissions($userId) {
     global $conn;
     $permissions = [];
@@ -138,35 +108,22 @@ function hasPermission($userId, $permission) {
 function updatePermission($userId, $permission, $granted) {
     global $conn;
     
-    // Check if user is admin
+    // Do not update permissions for ADMIN if you want to enforce all permissions
     $stmt = $conn->prepare("SELECT role FROM users WHERE id = ?");
     $stmt->bind_param("i", $userId);
     $stmt->execute();
-    $result = $stmt->get_result();
-    $user = $result->fetch_assoc();
-    
+    $user = $stmt->get_result()->fetch_assoc();
     if ($user && $user['role'] === 'ADMIN') {
-        return false; // Cannot modify admin permissions
+        return false; // Optionally, you could allow modification for testing
     }
     
+    $grantedValue = (int)$granted;
     $stmt = $conn->prepare("
         INSERT INTO user_permissions (user_id, permission, granted)
         VALUES (?, ?, ?)
         ON DUPLICATE KEY UPDATE granted = ?
     ");
-    
-    $granted = (int)$granted;
-    $stmt->bind_param("isii", $userId, $permission, $granted, $granted);
+    $stmt->bind_param("isii", $userId, $permission, $grantedValue, $grantedValue);
     return $stmt->execute();
-}
-
-// Function to initialize permissions for a new user
-function initializeUserPermissions($userId, $role = 'USER') {
-    $permissions = ['view', 'add', 'update', 'delete'];
-    $isAdmin = ($role === 'ADMIN');
-    
-    foreach ($permissions as $permission) {
-        updatePermission($userId, $permission, $isAdmin);
-    }
 }
 ?>
